@@ -20,7 +20,7 @@ import { IPaneView } from '../views/pane/ipane-view';
 import { createBoundCanvas, getContext2D, Size } from './canvas-utils';
 import { ChartWidget } from './chart-widget';
 import { KineticAnimation } from './kinetic-animation';
-import { MouseEventHandler, MouseEventHandlerMouseEvent, MouseEventHandlers, MouseEventHandlerTouchEvent, Position, TouchMouseEvent } from './mouse-event-handler';
+import { MouseEventHandler, MouseEventHandlerEventBase, MouseEventHandlerMouseEvent, MouseEventHandlers, MouseEventHandlerTouchEvent, Position, TouchMouseEvent } from './mouse-event-handler';
 import { PriceAxisWidget, PriceAxisWidgetSide } from './price-axis-widget';
 
 const enum Constants {
@@ -46,6 +46,10 @@ type PaneViewsGetter = (source: IDataSource, pane: Pane) => readonly IPaneView[]
 
 function sourcePaneViews(source: IDataSource, pane: Pane): readonly IPaneView[] {
 	return source.paneViews(pane);
+}
+
+function sourceLabelPaneViews(source: IDataSource, pane: Pane): readonly IPaneView[] {
+	return source.labelPaneViews(pane);
 }
 
 function sourceTopPaneViews(source: IDataSource, pane: Pane): readonly IPaneView[] {
@@ -272,14 +276,7 @@ export class PaneWidget implements IDestroyable, MouseEventHandlers {
 			return;
 		}
 		this._onMouseEvent();
-
-		const x = event.localX;
-		const y = event.localY;
-
-		if (this._clicked.hasListeners()) {
-			const currentTime = this._model().crosshairSource().appliedIndex();
-			this._clicked.fire(currentTime, { x, y });
-		}
+		this._fireClickedDelegate(event);
 	}
 
 	public pressedMouseMoveEvent(event: MouseEventHandlerMouseEvent): void {
@@ -297,6 +294,13 @@ export class PaneWidget implements IDestroyable, MouseEventHandlers {
 		this._longTap = false;
 
 		this._endScroll(event);
+	}
+
+	public tapEvent(event: MouseEventHandlerTouchEvent): void {
+		if (this._state === null) {
+			return;
+		}
+		this._fireClickedDelegate(event);
 	}
 
 	public longTapEvent(event: MouseEventHandlerTouchEvent): void {
@@ -478,6 +482,7 @@ export class PaneWidget implements IDestroyable, MouseEventHandlers {
 				this._drawGrid(ctx, this._canvasBinding.pixelRatio);
 				this._drawWatermark(ctx, this._canvasBinding.pixelRatio);
 				this._drawSources(ctx, this._canvasBinding.pixelRatio, sourcePaneViews);
+				this._drawSources(ctx, this._canvasBinding.pixelRatio, sourceLabelPaneViews);
 			}
 			ctx.restore();
 		}
@@ -502,6 +507,15 @@ export class PaneWidget implements IDestroyable, MouseEventHandlers {
 		}
 
 		this._state = null;
+	}
+
+	private _fireClickedDelegate(event: MouseEventHandlerEventBase): void {
+		const x = event.localX;
+		const y = event.localY;
+
+		if (this._clicked.hasListeners()) {
+			this._clicked.fire(this._model().timeScale().coordinateToIndex(x), { x, y });
+		}
 	}
 
 	private _drawBackground(ctx: CanvasRenderingContext2D, pixelRatio: number): void {
